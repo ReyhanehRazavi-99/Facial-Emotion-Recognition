@@ -2,7 +2,7 @@
 ## Conceptual Design — Real-Time Emotion Recognition from a Webcam
 Problem statement & high-level goal (Part 1)
 
-The goal of my semester project is to build a real-time facial emotion recognition (FER) system that runs on a laptop webcam. Given a live video stream, the system will detect a face, preprocess it, and classify the expression into eight categories consistent with FERPlus: neutral, happiness, surprise, sadness, anger, disgust, fear, and contempt. The final application will display the webcam feed with bounding boxes and emotion labels (and confidence) overlaid.
+The goal of my semester project is to build a real-time facial emotion recognition (FER) system that runs on a laptop webcam. Given a live video stream, the system will detect a face, preprocess it, and classify the expression into eight categories : neutral, happiness, surprise, sadness, anger, disgust, fear, and contempt. The final application will display the webcam feed with bounding boxes and emotion labels (and confidence) overlaid.
 
 At this stage, the focus is on conceptual design rather than implementation details. The plan balances classic CV steps (face detection and alignment) with deep feature extractors and a downstream SVM (SVC) classifier. I will experiment with several backbone models—including pretrained CNNs/ViTs and a small CNN I design from scratch—and compare them using a common validation protocol. The end product should be fast enough for interactive use (low latency) and robust to small pose changes, lighting variations, and background clutter.
 
