@@ -1,130 +1,95 @@
-# Facial-Emotion-Recognition
-## Conceptual Design — Real-Time Emotion Recognition from a Webcam
-Problem statement & high-level goal (Part 1)
+#Part 1 — Conceptual Design: Real-Time Emotion Recognition from a Webcam
 
-The goal of my semester project is to build a real-time facial emotion recognition (FER) system that runs on a laptop webcam. Given a live video stream, the system will detect a face, preprocess it, and classify the expression into eight categories : neutral, happiness, surprise, sadness, anger, disgust, fear, and contempt. The final application will display the webcam feed with bounding boxes and emotion labels (and confidence) overlaid.
+Goal. Build a real-time facial emotion recognition (FER) system that runs locally on a laptop using the built-in webcam. For each video frame, the system detects a face, preprocesses it, and classifies the expression into eight categories: neutral, happiness, surprise, sadness, anger, disgust, fear, and contempt. The application overlays a bounding box, label, and confidence on the live video.
 
-At this stage, the focus is on conceptual design rather than implementation details. The plan balances classic CV steps (face detection and alignment) with deep feature extractors and a downstream SVM (SVC) classifier. I will experiment with several backbone models—including pretrained CNNs/ViTs and a small CNN I design from scratch—and compare them using a common validation protocol. The end product should be fast enough for interactive use (low latency) and robust to small pose changes, lighting variations, and background clutter.
+System overview. The pipeline is deliberately modular so I can swap parts and compare designs:
 
-Data requirements & dataset plan (Part 2)
+Face detection & cropping. Start with a lightweight detector (OpenCV Haar cascade) for simplicity and speed; consider upgrading to a modern detector/landmarks later if latency permits. A small margin around the detected face is retained to preserve context.
 
-I will primarily use FERPlus, a cleaned and re-annotated version of FER2013, which provides expression labels for ~35K grayscale face crops at 48×48 resolution along the eight expression classes listed above. I will convert these labels into hard class targets (argmax of the provided label distribution) for standard classification, but I may also keep the full distributions for optional experimentation (e.g., Kullback–Leibler divergence or label smoothing).
+Preprocessing & normalization. Convert to RGB, resize to 224×224, and normalize with ImageNet mean/std so pretrained backbones behave as expected. I will investigate optional face alignment (e.g., using eye positions) to reduce pose variance and improve robustness.
 
-To support model development correctly, I will maintain three disjoint subsets:
+Feature extraction (backbones). Compare multiple learned representations:
 
-Training set: used to fit model parameters and/or the SVM classifier. I will apply data augmentation only here (random horizontal flips, small rotations ±15°, small shifts/zoom, brightness/contrast jitter) to improve generalization and approximate real-world webcam conditions.
+GoogLeNet (Inception v1) — efficient, competitive baseline; I can fine-tune end-to-end or extract its penultimate embedding (~1024-D).
 
-Validation set: held-out for model selection and early stopping. No training happens on this split; augmentation is minimal or none so it approximates deployment conditions. I will use it to choose the best backbone, SVM hyperparameters, and preprocessing options.
+EfficientNetV2-B0 — modern, parameter-efficient CNN; likely to offer better accuracy/latency trade-offs.
 
-Test set: never touched during development. It provides the final, unbiased estimate of performance. I will report accuracy, macro-F1, and a confusion matrix.
+DeiT-Base (Vision Transformer) — transformer model; either fine-tune the full model or export the pre-logits / CLS token (~768-D) as a fixed feature.
 
-Because contempt is relatively rare in FERPlus, I expect class imbalance. I’ll address it via class weighting, balanced sampling, or focal loss during end-to-end training, and class_weight="balanced" when training SVC.
+AlexNet (feature extractor) — fast classical baseline for feature+SVM experiments.
 
-(Optionally, for future robustness) I may supplement FERPlus with small curated samples from other FER datasets (e.g., RAF-DB or AffectNet subsets) to probe domain shift. If I do so, I will keep the official FERPlus test set pristine for final evaluation.
+Small scratch CNN — a compact network I’ll design to understand capacity/overfitting on FER+ and to benchmark against pretrained models.
 
-Proposed pipeline & what must be learned (Part 3)
+Classifier. I will evaluate two regimes:
 
-1) Face detection & alignment.
-Even though FERPlus images are already face crops, webcam frames are not. I will run a lightweight face detector (initially OpenCV Haar cascade for simplicity; later possibly a modern detector) and crop to the face region. I will experiment with alignment using eye corners or facial landmarks; the goal is to reduce pose variation so the downstream classifier can be more invariant to roll/scale.
+End-to-end softmax head (fine-tuning the backbone with cross-entropy and label smoothing).
 
-2) Preprocessing & invariances.
-I’ll standardize the input to what the backbone expects. For pretrained ImageNet models that operate on RGB 224×224, I will resize and apply ImageNet mean/std normalization. The method should be largely agnostic to background (tight cropping helps), moderately agnostic to illumination (augmentation + normalization), and tolerant to small pose/scale changes (alignment + augmentation). I’ll explicitly test robustness to glasses, mild occlusions, and mild blur.
+Backbone + SVM (SVC) using frozen deep embeddings as features. Linear SVM (with C and class weights) provides a strong baseline on modest data; RBF SVM can be explored if nonlinearity yields gains that justify added cost.
 
-3) Feature extractors (multiple backbones).
-I’ll compare several models:
+Inference loop. Capture frames, detect face, crop+normalize, run the backbone (GPU if available; CPU/DirectML otherwise), classify via softmax head or SVM, and render results at ~15–30 FPS with low latency.
 
-GoogLeNet (Inception v1) — a classic, efficient CNN; I’ve already prototyped training it end-to-end and also using it as a fixed feature extractor (1024-D embedding before the final FC).
+What the model should be invariant to. The solution should be largely agnostic to background (tight crops help), moderately robust to illumination changes, small pose/scale shifts, mild occlusions (e.g., glasses), and moderate blur/noise. These requirements shape augmentation and alignment choices. Extreme poses or heavy occlusions are out of scope for the first iteration.
 
-AlexNet — older but fast; useful as a baseline and for quick feature extraction.
+Training & model selection. I will:
 
-DeiT-Base (Vision Transformer) — a modern transformer model; I’ll either fine-tune it end-to-end or extract its CLS token embedding (typically 768-D).
+Train on an augmented training split and monitor validation loss/accuracy for early stopping and checkpointing (keep the best model by validation loss).
 
-Scratch CNN — a small custom network (3–5 conv blocks + GAP + linear head) trained from scratch on FERPlus to understand data requirements, capacity, and overfitting behavior.
+Use optimizers appropriate to each backbone (e.g., AdamW + cosine schedule for ViTs, Adam/SGD for CNNs).
 
-For each backbone, I’ll consider two regimes:
+Track per-class metrics and confusion matrices to expose common confusions (e.g., fear↔surprise, anger↔disgust, neutral↔sadness).
 
-End-to-end softmax: Replace the final classification head with an 8-class layer and fine-tune with cross-entropy (and label smoothing). This establishes a strong baseline.
+For SVM pipelines, perform light hyperparameter sweeps (e.g., C, kernel) and consider probability calibration if needed.
 
-Backbone + SVM: Freeze the backbone, extract a compact embedding per image (e.g., GoogLeNet 1024-D, DeiT 768-D), then train an SVC downstream. This often yields competitive accuracy with less overfitting on small datasets, and it gives a crisp separation between representation learning and classification.
+Why SVM? On fixed-dimensional deep embeddings, SVMs are strong margin-based classifiers that often generalize well with modest data and offer a simple tunable boundary (especially linear SVM). They separate representation learning (backbone) from classification, which helps diagnose where performance bottlenecks arise.
 
-Why SVM?
-SVMs are powerful margin-based classifiers that work well on fixed-dimensional embeddings, especially when data is modest. With linear SVM I get speed and interpretability (a single hyperparameter C). I can also try RBF SVM (tuning C and gamma) for nonlinear separation, though I’ll weigh accuracy gains against inference cost.
+Runtime & deployment. To maintain responsiveness: favor efficient backbones (GoogLeNet/EfficientNet) if DeiT is too slow on CPU; use mixed precision on GPU; cache allocations; avoid unnecessary copies; and keep pre/post-processing lightweight.
 
-4) Training strategy & early stopping.
-I’ll train on the augmented training split and monitor validation loss/accuracy for early stopping. I may use AdamW with a cosine schedule (warm-up) for transformer models and standard Adam/SGD for CNNs. I’ll log metrics per epoch and save the best checkpoint based on validation performance.
+Ethics & risks. FER datasets can carry demographic and contextual biases. I will report per-class metrics and document limitations; the application runs fully on-device to protect privacy. Expression labels can be ambiguous; label smoothing or using FER+ label distributions may better reflect uncertainty. Lastly, webcam conditions can differ from curated datasets (domain shift); I may collect a small, consented calibration set to probe this gap.
 
-Features to calculate & properties to be agnostic to (Part 4)
+#Part 2 — Data Acquisition & Splits
 
-Features.
-For deep models, the “features” are the penultimate embeddings produced by the network (e.g., the 1024-D vector in GoogLeNet or the CLS token in DeiT). If I prototype traditional baselines, I might compute HOG/LBP descriptors for comparison, but the main path uses deep embeddings.
+Primary dataset. I am using FER+ (FER2013Plus), a curated re-annotation of the FER2013 dataset with eight target expressions (anger, contempt, disgust, fear, happiness, neutral, sadness, surprise). FER+ consists of in-the-wild face crops (originally 48×48 grayscale), which I upscale to 224×224 and replicate across three channels for ImageNet-pretrained backbones.
 
-Agnostic properties.
-The solution should ignore background and be robust to minor head pose, illumination, scale, small occlusions, and camera noise. Augmentations and alignment explicitly target these nuisances. The system is not expected to handle extreme poses or heavy occlusions (e.g., masks covering most of the face) in the first iteration.
+Source (download): FER2013Plus (FER+) on Kaggle — Subhaditya’s distribution.
 
-Metrics, evaluation, and analysis plan (Part 5)
+References: FER13/Kaggle (2013) challenge dataset and the FER+ re-annotation paper by Barsoum et al. (2016), which introduces label distributions gathered by crowd workers.
 
-I will report:
+Project-specific split. In line with the recommended train / validation / test paradigm, I maintain three disjoint subsets:
 
-Top-1 accuracy on validation and test.
+Training set — used to fit model parameters and, for the SVM route, to learn the SVC on deep embeddings. Data augmentation (minor rotations/shift/zoom/horizontal flip; optional brightness/contrast jitter) is applied only to this set to improve generalization.
 
-Macro-F1 to account for class imbalance.
+Validation set (hold-out) — fixed 20% carved from the training directory (single hold-out split, not k-fold). Used each epoch for model selection and early stopping. No training occurs here; augmentation is minimal or none, to approximate deployment conditions.
 
-Confusion matrices to expose which emotion pairs are commonly confused (e.g., fear vs. surprise, anger vs. disgust, neutral vs. sadness).
+Test set (unknown) — kept sealed during development and evaluated once for the final report, providing an unbiased estimate of performance.
 
-(Optional) Calibration (e.g., reliability diagrams) if probabilities are required; SVM scores can be calibrated via Platt scaling.
+Observed counts on my copy.
 
-I’ll perform ablation studies:
+Train: 22,712 images (8 classes)
 
-Backbone choice (GoogLeNet vs DeiT vs AlexNet vs Scratch CNN).
+Validation: 5,674 images (8 classes)
 
-End-to-end softmax vs SVM on embeddings.
+Test: 7,099 images (8 classes)
 
-With vs without face alignment.
+Class mapping (alphabetical): anger=0, contempt=1, disgust=2, fear=3, happiness=4, neutral=5, sadness=6, surprise=7
 
-Effect of stronger augmentations and class weighting.
+Important differences between train vs. validation.
 
-Deployment sketch & runtime constraints (Part 6)
+Augmentation: present only in training; absent in validation/test to avoid inflating metrics.
 
-The inference pipeline in the app will be:
+Shuffling: training is shuffled to reduce correlation; validation/test evaluation is deterministic.
 
-Capture frame from webcam.
+Identity leakage caveat: FER+ does not include subject IDs, so image-level splitting cannot guarantee person-disjoint partitions. To mitigate, I (a) rely on augmentation, (b) select models via validation loss (not test), and (c) keep the test set untouched until the end. If identity-level separation becomes necessary, a dataset with subject IDs or manual identity grouping would be required.
 
-Detect face; crop with a small margin.
+Sample characteristics.
 
-Resize to 224×224, normalize.
+Resolution & format: native 48×48 grayscale; upscaled to 224×224 and expanded to 3 channels for pretrained backbones.
 
-Run backbone (GPU if available, else CPU/DirectML).
+Acquisition & sensors: scraped from diverse sources; mixed cameras and conditions; unconstrained “in-the-wild” faces.
 
-Classify with SVC (or the model head).
+Ambient conditions: broad variability in illumination, pose, background clutter, and mild occlusions; this variability is aligned with the webcam deployment target.
 
-Overlay label + confidence; loop at ~15–30 FPS if possible.
+Class balance: expected imbalance (e.g., happiness often over-represented). I address this with class weighting (for SVM and some end-to-end setups), careful thresholding, and macro-averaged metrics (macro-F1) alongside accuracy.
 
-To keep latency low I will:
+Quality control & integrity. I verified class folders and counts, ensured the folder structure is consistent, and confirmed the eight-class mapping used by my loaders. I also standardized preprocessing (resize + ImageNet normalization) across all backbones to keep comparisons fair.
 
-favor GoogLeNet or Mobile-friendly models if DeiT is too slow on CPU,
-
-use mixed precision when running on a GPU,
-
-cache allocations, and avoid unnecessary image copies.
-
-Risks, ethics, and open questions (Part 7)
-
-Dataset bias & fairness: FERPlus is web-scraped; distribution across age, ethnicity, and lighting can bias outcomes. I will monitor per-class/per-subset performance and document limitations.
-
-Ambiguity of expressions: Some frames express mixed emotions; “ground truth” is not always absolute. That’s why label smoothing or using FERPlus label distributions could help.
-
-Privacy: All processing stays on device; no images are stored or sent. I will display a clear note in the README about responsible use.
-
-Domain shift: Webcam conditions differ from curated datasets. I may collect a small personal calibration set (with consent) to fine-tune or at least evaluate domain shift.
-
-What I need to learn next (Part 8)
-
-Practical face alignment (landmarks, similarity transforms).
-
-Proper training regularization (weight decay, label smoothing, early stopping).
-
-SVM hyperparameter tuning and calibration on deep embeddings.
-
-Debugging with error analysis: read confusion matrices, inspect misclassifications, and adjust augmentations/alignments accordingly.
-
-Lightweight deployment tricks (mixed precision, smaller backbones, quantization if needed).
+Deliverables & handling. I have physically downloaded FER+ and instantiated the three splits above. The training and validation partitions are in active use for model development and selection; the test partition is reserved exclusively for final evaluation and reporting.
