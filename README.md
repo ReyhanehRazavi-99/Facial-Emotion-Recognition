@@ -1,4 +1,4 @@
-#Part 1 — Conceptual Design: Real-Time Emotion Recognition from a Webcam
+###Part 1 — Conceptual Design: Real-Time Emotion Recognition from a Webcam
 
 Goal. Build a real-time facial emotion recognition (FER) system that runs locally on a laptop using the built-in webcam. For each video frame, the system detects a face, preprocesses it, and classifies the expression into eight categories: neutral, happiness, surprise, sadness, anger, disgust, fear, and contempt. The application overlays a bounding box, label, and confidence on the live video.
 
@@ -46,11 +46,12 @@ Runtime & deployment. To maintain responsiveness: favor efficient backbones (Goo
 
 Ethics & risks. FER datasets can carry demographic and contextual biases. I will report per-class metrics and document limitations; the application runs fully on-device to protect privacy. Expression labels can be ambiguous; label smoothing or using FER+ label distributions may better reflect uncertainty. Lastly, webcam conditions can differ from curated datasets (domain shift); I may collect a small, consented calibration set to probe this gap.
 
-#Part 2 — Data Acquisition & Splits
+###Part 2 — Data Acquisition & Splits
 
 Primary dataset. I am using FER+ (FER2013Plus), a curated re-annotation of the FER2013 dataset with eight target expressions (anger, contempt, disgust, fear, happiness, neutral, sadness, surprise). FER+ consists of in-the-wild face crops (originally 48×48 grayscale), which I upscale to 224×224 and replicate across three channels for ImageNet-pretrained backbones.
 
-Source (download): FER2013Plus (FER+) on Kaggle — Subhaditya’s distribution.
+Source (download): Kaggle – FER2013Plus (FER+)
+https://www.kaggle.com/datasets/subhaditya/fer2013plus
 
 References: FER13/Kaggle (2013) challenge dataset and the FER+ re-annotation paper by Barsoum et al. (2016), which introduces label distributions gathered by crowd workers.
 
