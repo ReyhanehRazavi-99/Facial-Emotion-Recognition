@@ -96,7 +96,7 @@ Quality control & integrity. I verified class folders and counts, ensured the fo
 Deliverables & handling. I have physically downloaded FER+ and instantiated the three splits above. The training and validation partitions are in active use for model development and selection; the test partition is reserved exclusively for final evaluation and reporting.
 
 
-##Part 3 — Preprocessing, Segmentation & Feature Extraction (First Update)
+## Part 3 — Preprocessing, Segmentation & Feature Extraction (First Update)
 Overview
 
 This update documents the pipeline pieces I have implemented so far for facial emotion recognition on FERPlus (8 classes: anger, contempt, disgust, fear, happiness, neutral, sadness, surprise). The focus here is on data preprocessing, (light) segmentation, and feature extraction—plus a rationale for the methods I chose.
