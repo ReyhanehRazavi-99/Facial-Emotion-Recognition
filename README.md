@@ -114,18 +114,6 @@ Modern transformer backbone trained with a regularized schedule & mixed precisio
 
 Each path uses the same, comparable preprocessing and the same train/val/test split protocol, so results are comparable in the next phase.
 
-Data Preprocessing
-Dataset & Splits
-
-Dataset: FERPlus (face crops, 48×48 grayscale; I upsample to 224×224 RGB for ImageNet-pretrained backbones).
-
-Splits: I maintain three disjoint subsets:
-
-Train — used to fit model/heads and tune hyperparameters.
-
-Validation — held out during training for early stopping and model selection.
-
-Test — never touched until the final evaluation.
 
 How I construct Train/Val/Test in code:
 
@@ -133,7 +121,6 @@ For the Keras generator setup (used earlier), I employ validation_split=0.20 ins
 
 For the PyTorch/timm DeiT pipeline, I use StratifiedShuffleSplit on the TRAIN folder to create an 80/20 train/val split that preserves class ratios. The TEST folder stays untouched.
 
-This mirrors the assignment’s guidance (≈60/20/20 overall across the original FERPlus train/test).
 
 Normalization & Resizing
 
@@ -169,17 +156,15 @@ Augmentations add robustness to pose, illumination, and mild occlusions; they al
 
 FERPlus images are already face crops.
 
-For webcam inference, I added Haar cascade face detection to crop faces on-the-fly.
+For webcam inference, I will add Haar cascade face detection to crop faces on-the-fly.
 
 No heavy segmentation is required at training time; the face is already isolated. If needed later, I can add landmark-based alignment to reduce roll/scale variance.
 
-Justification:
-Training on already-cropped faces simplifies the pipeline and lets the backbone focus on expression cues. At inference on webcam, a fast face detector is sufficient to produce a comparable input crop to what the backbone saw during training.
+
 
 Feature Extraction Methods Implemented (What I ran)
 1) AlexNet (Fixed Features) + SVM
 
-Files: alexnet_feature_svm.py (your code block), figures saved under docs/figures/…
 
 Backbone: torchvision.models.alexnet(pretrained=True)
 I freeze the network and take features → avgpool → Flatten → 9216-D vector.
@@ -196,7 +181,6 @@ X_test (N×9216), y_test
 
 Classifier: StandardScaler + Linear SVM (C=1.0, class_weight="balanced")
 
-Validation use: select SVM hyperparameters and assess generalization without touching test.
 
 Outputs: Accuracy, classification report, and confusion matrices on val and test.
 
@@ -205,7 +189,6 @@ This is transfer learning by fixed features. It is computationally light (no bac
 
 2) AlexNet (Fine-Tuned End-to-End)
 
-Files: alexnet_finetune.py, figures under docs/figures/…
 
 Backbone: start from ImageNet weights; replace the final FC layer with an 8-class head.
 
@@ -222,7 +205,7 @@ This is transfer learning by fine-tuning. If the target domain (FERPlus facial e
 
 3) DeiT-Base (Vision Transformer)
 
-Files: deit_train.py, figures under docs/figures/…
+
 
 Backbone: timm.create_model('deit_base_patch16_224', pretrained=True, num_classes=8)
 
@@ -235,15 +218,3 @@ Early stopping on validation loss; save best checkpoint + inference bundle (stat
 Why this approach?
 Transformers (ViTs) can capture long-range dependencies and often show strong transfer when regularized well. DeiT has a good compute/accuracy trade-off for 224×224 inputs; with modern augmentations and cosine scheduling it’s a solid benchmark against CNNs.
 
-Transfer Learning: two AlexNet strategies & ViT comparison (brief discussion)
-
-AlexNet (fixed features+SVM):
-I freeze ImageNet-learned filters and treat AlexNet as a generic feature extractor. This is fast to train, needs very little tuning, and avoids overfitting on small datasets. Its limitation is capacity: without adapting the filters, nuanced emotion cues may not be fully captured—particularly for ambiguous classes like fear vs. surprise or anger vs. disgust.
-
-AlexNet (fine-tuned):
-By updating the convolutional layers, the model specializes to FERPlus. This typically improves accuracy (especially minority/ambiguous classes) at the cost of longer training, more sensitivity to hyperparameters, and a higher risk of overfitting (mitigated with augmentation, label smoothing, and early stopping).
-
-DeiT (ViT):
-DeiT brings global context modeling via self-attention and tends to be robust with strong regularization (AutoAugment, Random Erasing, AdamW, cosine schedule). On CPU it is heavier at inference time than AlexNet; on GPU it’s fine. I included DeiT to benchmark a modern transformer against classical CNN baselines and to probe whether global context helps FER on FERPlus.
-
-In short: I explored both lightweight classical transfer (fixed features) and heavier but potentially stronger transfer (fine-tuning), then compared a CNN vs a ViT under the same preprocessing/splits to understand accuracy-latency trade-offs for the eventual webcam app.
