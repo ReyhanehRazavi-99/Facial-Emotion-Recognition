@@ -165,7 +165,7 @@ No heavy segmentation is required at training time; the face is already isolated
 Feature Extraction Methods Implemented (What I ran)
 1) AlexNet (Fixed Features) + SVM
 
-
+It is on the furplus_1 file, first part
 Backbone: torchvision.models.alexnet(pretrained=True)
 I freeze the network and take features → avgpool → Flatten → 9216-D vector.
 
@@ -189,7 +189,7 @@ This is transfer learning by fixed features. It is computationally light (no bac
 
 2) AlexNet (Fine-Tuned End-to-End)
 
-
+It is on the furplus_1 file, second part
 Backbone: start from ImageNet weights; replace the final FC layer with an 8-class head.
 
 Training: optimize all weights (or optionally freeze early conv blocks) using AdamW, label smoothing, and a cosine LR schedule; early stopping on validation loss.
@@ -206,7 +206,7 @@ This is transfer learning by fine-tuning. If the target domain (FERPlus facial e
 3) DeiT-Base (Vision Transformer)
 
 
-
+It is on the ferplus_vision_transformer file
 Backbone: timm.create_model('deit_base_patch16_224', pretrained=True, num_classes=8)
 
 Training: end-to-end fine-tuning with AdamW, label smoothing, CosineLRScheduler, AutoAugment, RandomErasing, and mixed precision (autocast + GradScaler) on GPU.
