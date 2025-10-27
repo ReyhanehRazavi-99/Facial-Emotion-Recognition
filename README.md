@@ -218,3 +218,8 @@ Early stopping on validation loss; save best checkpoint + inference bundle (stat
 Why this approach?
 Transformers (ViTs) can capture long-range dependencies and often show strong transfer when regularized well. DeiT has a good compute/accuracy trade-off for 224×224 inputs; with modern augmentations and cosine scheduling it’s a solid benchmark against CNNs.
 
+The results show a clear progression in performance as models become more expressive.
+Using AlexNet only as a feature extractor produced limited classification capability, especially for nuanced emotions such as contempt and sadness.
+Fine-tuning AlexNet improved class separation, indicating that domain-specific learning is crucial for emotion recognition.
+Ultimately, the Vision Transformer achieved the strongest performance due to its self-attention mechanism, which captures global facial structures and subtle expression patterns more effectively.
+These findings justify continuing the project using transformer-based architectures. (Look at the graphs in the code also images uploaded, named 1,2, and 3 for the 3 models respectievely.)
