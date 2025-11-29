@@ -218,6 +218,113 @@ Early stopping on validation loss; save best checkpoint + inference bundle (stat
 Why this approach?
 Transformers (ViTs) can capture long-range dependencies and often show strong transfer when regularized well. DeiT has a good compute/accuracy trade-off for 224×224 inputs; with modern augmentations and cosine scheduling it’s a solid benchmark against CNNs.
 
+
+
+## part 4
+
+Fine-tuning strategies and experimental notebooks
+
+After training baseline models, I systematically compared three different fine-tuning strategies for two different backbones: AlexNet (a classic CNN) and DeiT (Data-efficient Image Transformer, a Vision Transformer). Instead of creating separate files for each configuration, I implemented all three setups for each backbone inside two Jupyter notebooks:
+
+– 3diffeent_alexnet.ipynb
+– 3different-vision_transformers.ipynb
+
+In each notebook, the three fine-tuning strategies are:
+
+a) Linear probe. In this setup, all backbone weights are frozen, and only the final fully connected classification layer is replaced and trained on FERPlus. The notebook configures the model so that the AlexNet or DeiT backbone acts purely as a fixed feature extractor. This approach is computationally cheap and provides a lower bound on performance, showing how transferable the pretrained features are without any adaptation to the emotion recognition task.
+
+b) Partial fine-tune. In this setup, the early and mid-level layers of the backbone remain frozen, while the last block or last stage of the backbone and the final classifier are unfrozen and trainable. Within each notebook, this is implemented by selectively setting requires_grad for the last part of the network. The motivation is to allow the model to adapt its highest-level features to FERPlus while preserving most of the general representation learned during pretraining. This provides a compromise between efficiency and flexibility and usually improves performance over a pure linear probe.
+
+c) Full fine-tune. In this setup, all layers of the backbone and the classifier are unfrozen and updated during training. The notebooks configure the optimizer to update the entire network. This gives the model maximum flexibility to adapt to the FERPlus domain at the cost of higher computation and a higher risk of overfitting if regularization and early stopping are not used carefully.
+
+Both notebooks follow a similar structure: loading FERPlus, applying preprocessing and data augmentation, selecting one of the three fine-tuning modes, training the model accordingly, and evaluating it using overall accuracy and class-wise confusion matrices on the validation and/or test sets. By keeping all three strategies in a single notebook per backbone, it is easy to compare the different settings side by side and reuse the same data-loading and evaluation code.
+
+Model comparison and selection
+
+By comparing the validation accuracies and confusion matrices across the three strategies inside each notebook, a clear pattern emerged. For both AlexNet and DeiT, performance improved as I moved from the linear probe to the partial fine-tune and then to the full fine-tune configuration. However, the fully fine-tuned DeiT model consistently achieved the highest overall accuracy and produced the most balanced confusion matrix, particularly on more challenging classes such as contempt, disgust, and fear. Fully fine-tuned AlexNet still lagged behind fully fine-tuned DeiT, especially in distinguishing subtle expressions and separating neutral from low-intensity sadness or anger.
+
+Based on these results, I selected the full fine-tune DeiT configuration as the final model to deploy for real-time emotion recognition using the webcam.
+
+Exported inference artifacts and external storage
+
+After identifying the best model, I exported it into a small, deployment-ready set of artifacts. Because these files are very large and exceed GitHub’s per-file size limit, they are stored externally on Google Drive and can be downloaded from the link provided. The main artifacts are:
+
+– deit_best.ckpt
+This is the full training checkpoint saved at the epoch with the best validation performance. It contains the complete model weights, optimizer state, learning-rate scheduler state, and training metadata such as the best epoch and best accuracy. It is mainly used for reproducibility and for continuing training or further experiments.
+https://drive.google.com/file/d/11RZYopQp29cE6Hx4HF9qgYuBQ9p0ZonU/view?usp=sharing
+
+
+
+– deit_inference_model_state.pth
+This is a compact state-dict containing only the model weights needed for inference, without any optimizer or scheduler information. This is the file that the real-time inference script loads by default. It is smaller than the full checkpoint and therefore more convenient for deployment.
+
+https://drive.google.com/file/d/1XmZd-2bdaNF2sTXSRCsPPwtANv3h2o2C/view?usp=sharing
+
+
+
+– deit_classify_scripted.pt
+This is a TorchScript version of the classifier, obtained by scripting or tracing the trained model. TorchScript allows the model to be run without the original Python training code and makes it easier to integrate the model into other applications or different runtime environments, with potentially faster inference.
+
+https://drive.google.com/file/d/1-EHdPDzAbQkpHDus4cILXzbuBpht-X6w/view?usp=sharing
+
+
+
+
+– deit_inference_meta.json
+This JSON file stores the metadata required at inference time. It includes the list of emotion class labels (anger, contempt, disgust, fear, happiness, neutral, sadness, and surprise), the expected input image size, normalization parameters, and any configuration flags used during training. This ensures that the preprocessing performed at inference time matches the training configuration exactly.
+
+https://drive.google.com/file/d/1pJOIl-HC2gsiWmYebn0b8mPpdgVjV2BW/view?usp=sharing
+
+
+
+– run_webcam_deit.py
+This is the main inference script. It reads the metadata from deit_inference_meta.json, builds the DeiT model architecture, loads the weights from deit_inference_model_state.pth (or from the TorchScript file if configured that way), opens a webcam stream using OpenCV, preprocesses each frame (cropping and resizing the face region, converting to the correct tensor format, applying normalization), feeds the processed frame through the model, and overlays the predicted emotion label on the live video feed.
+
+The Google Drive link contains all of these files with the same names as above. Users are instructed to download them and place them into the appropriate project folder before running the webcam demo.
+
+How to run the real-time emotion recognition demo
+
+To run the webcam-based emotion recognition demo, the user first clones the repository and sets up a Python environment. On my machine, I used a conda environment named “emotion7,” but any environment name can be used.
+
+Step 1: Clone the repository and move into the project directory.
+
+cd Facial-Emotion-Recognition/emotion6
+
+Step 2: Create and activate a Python or conda environment (example using conda).
+
+conda create -n emotion7 python=3.10
+conda activate emotion7
+
+Step 3: Install the necessary packages. At a minimum, the environment should include PyTorch, torchvision, timm, OpenCV, NumPy, and Matplotlib.
+
+pip install torch torchvision timm opencv-python numpy matplotlib
+
+(If a requirements.txt file is provided in the repo, the user can instead run: pip install -r requirements.txt)
+
+Step 4: Download the model artifacts from Google Drive. The link to the Google Drive folder is given in the README. The user should download deit_inference_model_state.pth, deit_inference_meta.json, and optionally deit_best.ckpt and deit_classify_scripted.pt, and place them in the same folder as run_webcam_deit.py (for example, the emotion6 directory).
+
+Step 5: Run the webcam script.
+
+python run_webcam_deit.py
+
+If everything is configured correctly, the script will load the metadata and model weights, open the webcam, and start processing each frame. The predicted emotion label will be displayed on top of the live video stream in real time. For the report, I captured screenshots of myself displaying different emotions (such as happiness, sadness, anger, and surprise) to illustrate how the model behaves under realistic conditions.
+
+Challenges and limitations
+
+Although the real-time system demonstrates that a fully fine-tuned DeiT model can recognize emotions from a webcam feed, there are several important challenges and limitations.
+
+First, there is a domain shift between FERPlus and the webcam input. FERPlus images are grayscale, tightly cropped around the face, and often collected under more controlled conditions. The webcam feed, however, is RGB and can include variations in lighting, background clutter, camera angle, and partial occlusions from hair, glasses, or hands. This mismatch can reduce performance when the model is applied to real-time video, and some expressions that are easy to classify in FERPlus become more ambiguous.
+
+Second, FERPlus exhibits class imbalance. Emotions such as happiness and neutral are more frequent than others like contempt and disgust. As a result, the model may be biased toward predicting the majority classes during live use, particularly when expressions are subtle, mixed, or low in intensity.
+
+Third, there is label uncertainty. FERPlus labels are derived from multiple annotators, but the model trains on a single aggregated label per image. This discards information about disagreement among raters. When the webcam captures ambiguous expressions that humans might also disagree on, the model still outputs one hard label, which can sometimes give a misleading impression of high certainty.
+
+Fourth, there are computational constraints. Vision Transformers such as DeiT are more computationally demanding than shallower CNNs like AlexNet. On a CPU-only machine, the frame rate can drop, especially at higher input resolutions, which limits how smooth and “real-time” the experience is without GPU acceleration.
+
+Despite these limitations, the fully fine-tuned DeiT model clearly outperforms the AlexNet configurations in my experiments and serves as a strong proof-of-concept for real-time emotion recognition. The two notebooks (3diffeent_alexnet.ipynb and 3different-vision_transformers.ipynb) document how different fine-tuning strategies affect performance, and the exported artifacts together with run_webcam_deit.py and the Google Drive weights provide a compact, reproducible pipeline that others can download, run, analyze, and extend.
+
+
+
 The results show a clear progression in performance as models become more expressive.
 Using AlexNet only as a feature extractor produced limited classification capability, especially for nuanced emotions such as contempt and sadness.
 Fine-tuning AlexNet improved class separation, indicating that domain-specific learning is crucial for emotion recognition.
