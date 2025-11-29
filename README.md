@@ -307,7 +307,7 @@ Step 5: Run the webcam script.
 
 python run_webcam_deit.py
 
-If everything is configured correctly, the script will load the metadata and model weights, open the webcam, and start processing each frame. The predicted emotion label will be displayed on top of the live video stream in real time. For the report, I captured screenshots of myself displaying different emotions (such as happiness, sadness, anger, and surprise) to illustrate how the model behaves under realistic conditions.
+If everything is configured correctly, the script will load the metadata and model weights, open the webcam, and start processing each frame. The predicted emotion label will be displayed on top of the live video stream in real time. For the report, I captured screenshots of myself displaying different emotions (such as happiness, sadness, anger, and surprise) to illustrate how the model behaves under realistic conditions. My images are inthis repo with Rihanna added to their names.
 
 Challenges and limitations
 
