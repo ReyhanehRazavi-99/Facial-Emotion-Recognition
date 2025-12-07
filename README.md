@@ -330,3 +330,189 @@ Using AlexNet only as a feature extractor produced limited classification capabi
 Fine-tuning AlexNet improved class separation, indicating that domain-specific learning is crucial for emotion recognition.
 Ultimately, the Vision Transformer achieved the strongest performance due to its self-attention mechanism, which captures global facial structures and subtle expression patterns more effectively.
 These findings justify continuing the project using transformer-based architectures. (Look at the graphs in the code also images uploaded, named 1,2, and 3 for the 3 models respectievely.)
+
+
+
+
+
+## Part 5 – Final Evaluation on Unknown Test Data
+
+### 1. Test database: images folder
+
+For the final phase of the project, I evaluated the best-performing model (the fully fine-tuned DeiT Vision Transformer) on a **separate test database** that was not used for training or validation which are selfies I took from myself. To approximate more naturalistic conditions.
+The images are stored in Google Drive in an `images` folder that contains one subfolder per emotion class (except contempt, which I did not collect):
+
+- anger  
+- disgust  
+- fear  
+- happiness  
+- neutral  
+- sadness  
+- surprise  
+
+Drive folder (ND access):  
+`https://drive.google.com/drive/folders/1ZsrucHVU0yPKCMzWeDzmNO4b4HWdsB6l`
+
+Each subfolder contains a few images (PNG/JPEG) of me posing the corresponding expression. In total, the test database has **42 images**, with the following counts per class:
+
+- anger: 6  
+- disgust: 6  
+- fear: 5  
+- happiness: 7  
+- neutral: 8  
+- sadness: 5  
+- surprise: 5  
+
+This test set is intentionally different from FERPlus
+
+These differences create a strong **domain shift** and make this test database a meaningful way to stress-test how well the final model generalizes beyond FERPlus.
+
+---
+
+### 2. How to reproduce the evaluation on these images
+
+The repository includes a script called `eval_saved_images_deit.py` that evaluates the trained DeiT model on any folder of labeled images organized by class. To reproduce my evaluation on the images (my selfies:)):
+
+1. **Clone the repo and move into the emotion6 folder**
+
+   ```bash
+   git clone https://github.com/ReyhanehRazavi-99/Facial-Emotion-Recognition.git
+   cd Facial-Emotion-Recognition/emotion6
+Create and activate a Python/conda environment
+
+(You can choose any name; I used emotion7.)
+
+conda create -n emotion7 python=3.10
+conda activate emotion7
+
+
+
+install required packages
+
+pip install torch torchvision timm opencv-python numpy matplotlib scikit-learn
+
+
+Download the trained model artifacts from Google Drive
+
+Download the four files below and place them in the emotion6 folder (I named it that way) (or in a weights/ subfolder if you prefer and adjust the paths in the scripts accordingly):
+
+deit_best.ckpt
+Full training checkpoint (for reproducibility and further fine-tuning).
+https://drive.google.com/file/d/11RZYopQp29cE6Hx4HF9qgYuBQ9p0ZonU/view?usp=sharing
+
+deit_inference_model_state.pth
+Compact state dict used for inference (this is what both the webcam script and the evaluation script load).
+https://drive.google.com/file/d/1XmZd-2bdaNF2sTXSRCsPPwtANv3h2o2C/view?usp=sharing
+
+deit_classify_scripted.pt
+TorchScript version of the classifier (not required for eval_saved_images_deit.py, but included for completeness and potential deployment).
+https://drive.google.com/file/d/1-EHdPDzAbQkpHDus4cILXzbuBpht-X6w/view?usp=sharing
+
+deit_inference_meta.json
+Metadata for inference (class names, model name, normalization parameters).
+https://drive.google.com/file/d/1pJOIl-HC2gsiWmYebn0b8mPpdgVjV2BW/view?usp=sharing
+
+Download the test images folder
+
+Download the images folder from Drive and place it inside emotion6:
+
+Images folder (ND access):
+https://drive.google.com/drive/folders/1ZsrucHVU0yPKCMzWeDzmNO4b4HWdsB6l
+
+After downloading and unzipping, your structure should look like:
+
+emotion6/
+    eval_saved_images_deit.py
+    run_webcam_deit.py
+    deit_inference_model_state.pth
+    deit_inference_meta.json
+    deit_best.ckpt
+    deit_classify_scripted.pt
+    images/
+        anger/
+        disgust/
+        fear/
+        happiness/
+        neutral/
+        sadness/
+        surprise/
+
+
+Run the evaluation script
+
+Inside emotion6:
+
+python eval_saved_images_deit.py
+
+
+The script loads the DeiT model, reads the images/ folder with torchvision.datasets.ImageFolder, and prints the overall accuracy, confusion matrix, and a scikit-learn classification report.
+
+
+Running eval_saved_images_deit.py with the setup above produced the following output:
+see the uploaded image named result.
+
+Overall accuracy on the webcam images: 0.4524 (19 correct out of 42 images).
+
+The confusion matrix over the 7 emotions in the test database (rows = true labels, columns = predicted labels) is:
+
+Classes: ['anger', 'disgust', 'fear', 'happiness', 'neutral', 'sadness', 'surprise']
+
+[[0 0 0 0 5 1 0]   anger (n = 6)
+ [1 0 0 1 2 2 0]   disgust (n = 6)
+ [0 0 0 0 5 0 0]   fear (n = 5)
+ [0 0 0 7 0 0 0]   happiness (n = 7)
+ [0 0 0 0 8 0 0]   neutral (n = 8)
+ [0 0 0 0 5 0 0]   sadness (n = 5)
+ [0 0 0 0 1 0 4]]  surprise (n = 5)
+
+
+Key patterns:
+
+Happiness was recognized very well: all 7 happiness images were correctly classified as happiness.
+
+Neutral was also recognized reliably: all 8 neutral images were classified as neutral.
+
+Surprise was mostly correct: 4 of 5 surprise images were classified as surprise, and 1 was misclassified as neutral.
+
+All images of anger, disgust, fear, and sadness were misclassified, most commonly as neutral (and sometimes as happiness or sadness for disgust). This leads to zero precision and recall for those negative categories in the classification report.
+
+The scikit-learn classification report (truncated here) reflects this pattern:
+
+happiness: high precision and recall (F1 ≈ 0.93)
+
+neutral: lower precision but perfect recall (F1 ≈ 0.47)
+
+surprise: high precision and good recall (F1 ≈ 0.89)
+
+anger, disgust, fear, sadness: precision and recall are effectively 0.00 because the model never predicted these labels on this small test set.
+
+4. Interpretation and limitations
+
+The drop from the FERPlus validation accuracy to ~45% accuracy on the test data is expected and highlights several important limitations:
+
+Domain shift
+The model was trained on FERPlus, which consists mostly of grayscale, tightly cropped, relatively clean facial images. The images of mine are RGB, with variable lighting, background clutter, and less controlled head poses. This mismatch pushes the model outside its comfort zone and leads it to fall back on safer, more frequent categories such as neutral when uncertain.
+
+Class imbalance and subtle expressions
+FERPlus is imbalanced, with many more examples of neutral and happiness than of contempt, disgust, or fear. This bias carries over to the model. In my image set, negative expressions (anger, disgust, fear, sadness) are often subtle or mixed, making them harder for both humans and the model to distinguish. As a result, these classes are frequently collapsed into neutral or other broad negative categories.
+
+Small sample size
+The test set is very small (42 images total), so a handful of misclassifications can dramatically change the accuracy and per-class metrics. For example, with only 5 images of fear, misclassifying all of them immediately yields 0% recall for fear.
+
+Single subject and posed expressions
+All images are of one person (myself) posing expressions for the camera. This may not fully represent the diversity of real-world facial expressions. The model might be keying into idiosyncratic features of my face or the posing style rather than generalizable emotional cues.
+
+Possible improvements
+
+To reduce the error rates and make the system more robust for real-world use, future work could include:
+
+
+Adding stronger data augmentation (color jitter, random crops, blur, noise, varying brightness/contrast) during training to simulate webcam conditions.
+
+Using a more sophisticated face detection and alignment step before classification so that test images more closely resemble the FERPlus framing.
+
+Exploring domain adaptation or multi-dataset training, combining FERPlus with other emotion datasets.
+
+5. Contributions
+
+This project was completed as an individual assignment. I (Reyhaneh/Rihanna) implemented the data preprocessing, AlexNet and DeiT training pipelines, the three fine-tuning strategies (linear probe, partial fine-tune, full fine-tune), model selection based on validation performance, real-time webcam demo (run_webcam_deit.py), the creation and labeling of the image test set, the evaluation script (eval_saved_images_deit.py), and this final analysis of performance on unknown data.
